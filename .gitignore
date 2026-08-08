@@ -73,3 +73,18 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+# Unreal Engine 缓存目录
+Intermediate/
+Saved/
+Binaries/
+DerivedDataCache/
+Build/
+Platforms/
+
+# 本地配置、日志、临时文件
+*.log
+*.tmp
+*.vs
+*.suo
+*.sln
+*.user
