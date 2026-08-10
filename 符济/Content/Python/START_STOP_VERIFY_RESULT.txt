@@ -1,0 +1,5 @@
+FAIL
+Manual PIE on Lvl_ThirdPerson:
+- Run: Idle->RunStart->Loop->Stop->Idle
+- Alt Walk: Idle->WalkStart->Loop->Stop->Idle
+- Camera follows mouse; body orients to movement

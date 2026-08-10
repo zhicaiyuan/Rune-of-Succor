@@ -1,0 +1,13 @@
+Start/Stop wiring status
+sm_ok=False
+RTG:
+  Walk_Start_F_0_Seq=/Game/Characters/林符/动画/SwordRTG/Walk_Start_F_0_Seq_RTG
+  Walk_Stop_F_0_Seq=/Game/Characters/林符/动画/SwordRTG/Walk_Stop_F_0_Seq_RTG
+  Run_Start_F_0_Seq=/Game/Characters/林符/动画/SwordRTG/Run_Start_F_0_Seq_RTG
+  Run_Stop_F_0_Seq=/Game/Characters/林符/动画/SwordRTG/Run_Stop_F_0_Seq_RTG
+Montages:
+  Walk_Start_F_0_Seq=/Game/Characters/林符/动画/Montages/AM_Walk_Start_F_0
+  Walk_Stop_F_0_Seq=/Game/Characters/林符/动画/Montages/AM_Walk_Stop_F_0
+  Run_Start_F_0_Seq=/Game/Characters/林符/动画/Montages/AM_Run_Start_F_0
+  Run_Stop_F_0_Seq=/Game/Characters/林符/动画/Montages/AM_Run_Stop_F_0
+If SM auto-wire incomplete: open ABP_StrafeLocomotion AnimGraph state machine and connect Idle->WalkStart/RunStart->Locomotion->WalkStop/RunStop->Idle using sequences above.

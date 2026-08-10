@@ -1,0 +1,21 @@
+条件变量（无蒙太奇）
+
+角色 BP_ThirdPersonCharacter 每帧更新：
+  bWantsWalk     — 按住 Alt = true（走路）
+  bHasMoveInput  — 有 WASD/移动输入 = true
+
+在 AnimBP 状态机过渡里这样用（推荐直接读角色）：
+  TryGetPawnOwner -> Cast to BP_ThirdPersonCharacter
+  -> bHasMoveInput / bWantsWalk
+
+或自己在 AnimBP EventGraph 的 Blueprint Update Animation
+把这两个 bool 拷到 AnimBP 变量上，过渡里直接用变量。
+
+建议过渡：
+  Idle -> WalkStart:     bHasMoveInput AND bWantsWalk
+  Idle -> RunStart:      bHasMoveInput AND NOT bWantsWalk
+  WalkLoop -> WalkStop:  NOT bHasMoveInput AND bWantsWalk
+  RunLoop  -> RunStop:   NOT bHasMoveInput AND NOT bWantsWalk
+  Start/Stop 播完 -> 下一状态：勾 Automatic Rule
+
+不要再用 PlayAnimMontage 做起步/停止。

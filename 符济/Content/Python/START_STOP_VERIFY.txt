@@ -1,0 +1,9 @@
+Lvl_ThirdPerson Start/Stop check:
+1) No Alt + W: Run Start montage -> Run loop
+2) Release W: Run Stop -> Idle
+3) Alt + W: Walk Start -> Walk loop
+4) Release W: Walk Stop -> Idle
+5) Mouse look still drives camera boom
+
+Runtime path: Character Tick edge-detect -> PlayAnimMontage -> ABP DefaultSlot
+SM Start/Stop states may also exist (BoundGraph filled); transitions may need hand-link.
