@@ -1,28 +1,27 @@
-ABP turn variables (WASD direction change — NOT mouse)
+Turn variables — Actor facing vs move input
 
-VARIABLES (use these in SM)
----------------------------
-bWantsTurn90      bool   Abs angle in [TurnAngle90, TurnAngle180)
-bWantsTurn180     bool   Abs angle >= TurnAngle180
-bTurnLeft         bool   True = turn left (MoveYawDelta < 0). Swap L/R if mirrored.
-MoveYawDelta      float  Signed degrees (-180..180) from previous move dir to current
-AbsMoveYawDelta   float  Absolute MoveYawDelta
-TurnAngle90       float  Default 60
-TurnAngle180      float  Default 135
+FORMULA
+  InputYaw  = direction of WASD move input (world XY)
+  ActorYaw  = character actor rotation yaw
+  MoveYawDelta = NormalizeAxis(InputYaw - ActorYaw)
+  AbsMoveYawDelta = |MoveYawDelta|
 
-INTERNAL (usually ignore in SM)
--------------------------------
-PrevMoveYaw       float  Last move-input yaw
-bHasPrevMoveDir   bool   Had move input last frame
-PrevMoveDir       vector UNUSED (broken type) — ignore
+  bWantsTurn180 = hasInput AND Abs >= TurnAngle180   (default 135)
+  bWantsTurn90  = hasInput AND Abs >= TurnAngle90 AND Abs < TurnAngle180  (60..135)
+  bTurnLeft     = hasInput AND MoveYawDelta < 0
 
-STATE MACHINE
--------------
-Loop -> Turn180L : bWantsTurn180 AND bTurnLeft
-Loop -> Turn180R : bWantsTurn180 AND NOT bTurnLeft
-Loop -> Turn90L  : bWantsTurn90 AND bTurnLeft
-Loop -> Turn90R  : bWantsTurn90 AND NOT bTurnLeft
-Turn* -> Loop    : Automatic Rule (sequence end)
-Turn* -> Stop    : bStopInput (optional)
+WHY BETTER
+  Old: previous input vs current input (1-frame pulse, easy to miss)
+  New: body facing vs wanted move dir — stays true until character turns enough
 
-Examples: A then D ~180; A then S ~90. Mouse look does not affect these.
+SM (you wire)
+  Walk/Run -> Turn180L : bWantsTurn180 AND bTurnLeft
+  Walk/Run -> Turn180R : bWantsTurn180 AND NOT bTurnLeft
+  Walk/Run -> Turn90L  : bWantsTurn90 AND bTurnLeft
+  Walk/Run -> Turn90R  : bWantsTurn90 AND NOT bTurnLeft
+  Turn* -> Walk/Run    : Automatic Rule (sequence end)
+
+DEBUG (optional watch in PIE)
+  ActorYaw, InputYaw, MoveYawDelta, AbsMoveYawDelta, bWantsTurn180
+
+Tune: TurnAngle90 / TurnAngle180 on AnimBP defaults.
