@@ -88,3 +88,6 @@ Platforms/
 *.suo
 *.sln
 *.user
+
+# Marketplace / large environment pack (too large for GitHub; keep local only)
+符济/Content/Traditional_Chinese_Style_Park/
