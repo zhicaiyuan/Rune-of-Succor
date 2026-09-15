@@ -1,4 +1,4 @@
-# Visual Studio 2015 user specific files
+﻿# Visual Studio 2015 user specific files
 .vs/
 
 # Compiled Object files
@@ -90,4 +90,6 @@ Platforms/
 *.user
 
 # Marketplace / large environment pack (too large for GitHub; keep local only)
+fuji/Content/Traditional_Chinese_Style_Park/
+
 符济/Content/Traditional_Chinese_Style_Park/
