@@ -10,7 +10,7 @@ public class RuneofSuccor : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "UMG", "Slate", "SlateCore" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "ImageCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "ImageCore", "MotionWarping" });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
