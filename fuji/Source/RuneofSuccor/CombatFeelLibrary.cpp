@@ -1,4 +1,6 @@
 #include "CombatFeelLibrary.h"
+#include "AirAttackComponent.h"
+#include "UppercutComponent.h"
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
@@ -9,10 +11,14 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Math/RotationMatrix.h"
 #include "RootMotionModifier.h"
 #include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
@@ -124,6 +130,160 @@ namespace CombatFeel
 				RootPrimitive->IgnoreActorWhenMoving(Second, bIgnore);
 			}
 		}
+	}
+}
+
+
+UCombatFeelLibrary::UCombatFeelLibrary(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	if (!HasAnyFlags(RF_ClassDefaultObject))
+	{
+		return;
+	}
+	static const TCHAR* Directions[] = {
+		TEXT("F"), TEXT("F_R_45"), TEXT("R"), TEXT("B_R_45"),
+		TEXT("B"), TEXT("B_L_45"), TEXT("L"), TEXT("F_L_45")
+	};
+	AirDodgeMontages.SetNum(UE_ARRAY_COUNT(Directions));
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(Directions); ++Index)
+	{
+		const FString Name = FString::Printf(TEXT("Dodge_Air_%s_Seq_Montage"), Directions[Index]);
+		const FString Path = FString::Printf(
+			TEXT("/Game/Characters/\u6797\u7b26/\u52a8\u753b/Montages/\u7a7a\u4e2d\u95ea\u907f/%s.%s"),
+			*Name, *Name
+		);
+		ConstructorHelpers::FObjectFinder<UAnimMontage> Found(*Path);
+		if (Found.Succeeded())
+		{
+			AirDodgeMontages[Index] = Found.Object;
+		}
+	}
+}
+
+
+bool UCombatFeelLibrary::TryAirAttack(const UObject* WorldContextObject)
+{
+	ACharacter* Character = Cast<ACharacter>(CombatFeel::ResolveAttacker(WorldContextObject));
+	if (!IsValid(Character))
+	{
+		return false;
+	}
+	const UUppercutComponent* Uppercut = Character->FindComponentByClass<UUppercutComponent>();
+	if (Uppercut && Uppercut->IsUppercutActive())
+	{
+		return true; // 挑飞动画期间吸收重复左键，避免普通连击打断。
+	}
+	UAirAttackComponent* AirAttack = Character->FindComponentByClass<UAirAttackComponent>();
+	if (!AirAttack)
+	{
+		AirAttack = NewObject<UAirAttackComponent>(Character, TEXT("AirAttackComponent"));
+		AirAttack->RegisterComponent();
+	}
+	return AirAttack->TryAttack();
+}
+
+
+bool UCombatFeelLibrary::IsAirAttackActive(const UObject* WorldContextObject)
+{
+	const ACharacter* Character = Cast<ACharacter>(CombatFeel::ResolveAttacker(WorldContextObject));
+	const UAirAttackComponent* AirAttack = Character ? Character->FindComponentByClass<UAirAttackComponent>() : nullptr;
+	return AirAttack && AirAttack->IsAirAttackActive();
+}
+
+
+void UCombatFeelLibrary::BeginUppercutHold(const UObject* WorldContextObject)
+{
+	ACharacter* Character = Cast<ACharacter>(CombatFeel::ResolveAttacker(WorldContextObject));
+	if (!IsValid(Character))
+	{
+		return;
+	}
+	UUppercutComponent* Uppercut = Character->FindComponentByClass<UUppercutComponent>();
+	if (!Uppercut)
+	{
+		Uppercut = NewObject<UUppercutComponent>(Character, TEXT("UppercutComponent"));
+		Uppercut->RegisterComponent();
+	}
+	Uppercut->OnAttackPressed();
+}
+
+
+void UCombatFeelLibrary::EndUppercutHold(const UObject* WorldContextObject)
+{
+	ACharacter* Character = Cast<ACharacter>(CombatFeel::ResolveAttacker(WorldContextObject));
+	if (UUppercutComponent* Uppercut = Character ? Character->FindComponentByClass<UUppercutComponent>() : nullptr)
+	{
+		Uppercut->OnAttackReleased();
+	}
+}
+
+
+UAnimMontage* UCombatFeelLibrary::SelectAirDodgeMontage(
+	const UObject* WorldContextObject,
+	UAnimMontage* GroundMontage,
+	const int32 DirectionIndex
+)
+{
+	const ACharacter* Character = Cast<ACharacter>(CombatFeel::ResolveAttacker(WorldContextObject));
+	const UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
+	const bool bAirAttackActive = IsAirAttackActive(WorldContextObject);
+	if (!Movement || (!Movement->IsFalling() && !bAirAttackActive))
+	{
+		return GroundMontage;
+	}
+	int32 AirDirectionIndex = DirectionIndex;
+	// 空中连击期间屏蔽了移动输入，仍用当前按键选择相机朝向的八方向闪避。
+	if (bAirAttackActive)
+	{
+		if (const APlayerController* PlayerController = Cast<APlayerController>(Character->GetController()))
+		{
+			const int32 ForwardInput = int32(PlayerController->IsInputKeyDown(EKeys::W))
+				- int32(PlayerController->IsInputKeyDown(EKeys::S));
+			const int32 RightInput = int32(PlayerController->IsInputKeyDown(EKeys::D))
+				- int32(PlayerController->IsInputKeyDown(EKeys::A));
+			if (ForwardInput != 0 || RightInput != 0)
+			{
+			const FRotationMatrix CameraYaw(FRotator(0.0f, PlayerController->GetControlRotation().Yaw, 0.0f));
+			const FVector WorldDirection = CameraYaw.GetUnitAxis(EAxis::X) * ForwardInput
+				+ CameraYaw.GetUnitAxis(EAxis::Y) * RightInput;
+			const float Angle = FMath::Atan2(
+				FVector::DotProduct(WorldDirection, Character->GetActorRightVector()),
+				FVector::DotProduct(WorldDirection, Character->GetActorForwardVector()));
+			AirDirectionIndex = (FMath::RoundToInt(FMath::RadiansToDegrees(Angle) / 45.0f) + 8) % 8;
+		}
+		}
+	}
+	const TArray<TObjectPtr<UAnimMontage>>& Montages = GetDefault<UCombatFeelLibrary>()->AirDodgeMontages;
+	return Montages.IsValidIndex(AirDirectionIndex) && IsValid(Montages[AirDirectionIndex])
+		? Montages[AirDirectionIndex].Get() : GroundMontage;
+}
+
+
+UAnimMontage* UCombatFeelLibrary::BeginAirDodgeHover(const UObject* WorldContextObject, UAnimMontage* DodgeMontage)
+{
+	ACharacter* Character = Cast<ACharacter>(CombatFeel::ResolveAttacker(WorldContextObject));
+	if (!IsValid(Character))
+	{
+		return DodgeMontage;
+	}
+	UAirAttackComponent* AirCombat = Character->FindComponentByClass<UAirAttackComponent>();
+	if (!AirCombat)
+	{
+		AirCombat = NewObject<UAirAttackComponent>(Character, TEXT("AirAttackComponent"));
+		AirCombat->RegisterComponent();
+	}
+	AirCombat->BeginAirDodge(DodgeMontage);
+	return DodgeMontage;
+}
+
+
+void UCombatFeelLibrary::EndAirDodgeHover(const UObject* WorldContextObject)
+{
+	ACharacter* Character = Cast<ACharacter>(CombatFeel::ResolveAttacker(WorldContextObject));
+	if (UAirAttackComponent* AirCombat = Character ? Character->FindComponentByClass<UAirAttackComponent>() : nullptr)
+	{
+		AirCombat->EndAirDodge();
 	}
 }
 
@@ -461,7 +621,8 @@ bool UCombatFeelLibrary::PrepareExecutionPair(
 void UCombatFeelLibrary::ApplyTunedKnockback(
 	const UObject* WorldContextObject,
 	const FVector RequestedVelocity,
-	const int32 AttackIndex
+	const int32 AttackIndex,
+	const float MaxAirborneYSpeed
 )
 {
 	ACharacter* Victim = Cast<ACharacter>(CombatFeel::ResolveAttacker(WorldContextObject));
@@ -470,7 +631,41 @@ void UCombatFeelLibrary::ApplyTunedKnockback(
 		return;
 	}
 
-	const ACharacter* Player = AttackIndex >= 3 ? UGameplayStatics::GetPlayerCharacter(WorldContextObject, 0) : nullptr;
+	const ACharacter* Player = UGameplayStatics::GetPlayerCharacter(WorldContextObject, 0);
+	const float YSpeedLimit = FMath::Max(0.0f, MaxAirborneYSpeed);
+	const UUppercutComponent* Uppercut = Player ? Player->FindComponentByClass<UUppercutComponent>() : nullptr;
+	if (Victim != Player && Uppercut && Uppercut->IsUppercutActive())
+	{
+		// 挑飞以竖直速度为主，世界 Y 轴只保留少量侧移以方便继续追击。
+		FVector Outward = (Victim->GetActorLocation() - Player->GetActorLocation()).GetSafeNormal2D();
+		if (Outward.IsNearlyZero())
+		{
+			Outward = Player->GetActorForwardVector().GetSafeNormal2D();
+		}
+		FVector LaunchVelocity = Outward * 115.0f + FVector::UpVector * 650.0f;
+		LaunchVelocity.Y = FMath::Clamp(LaunchVelocity.Y, -YSpeedLimit, YSpeedLimit);
+		Victim->GetCharacterMovement()->StopMovementImmediately();
+		Victim->LaunchCharacter(LaunchVelocity, true, true);
+		return;
+	}
+	const UAirAttackComponent* AirAttack = Player ? Player->FindComponentByClass<UAirAttackComponent>() : nullptr;
+	if (Victim != Player && AirAttack && AirAttack->IsAirAttackActive())
+	{
+		// 前三段轻推以保留后续命中距离，最后一段才明显击退。
+		static constexpr float HorizontalSpeeds[] = {140.0f, 170.0f, 200.0f, 360.0f};
+		static constexpr float UpwardSpeeds[] = {45.0f, 55.0f, 70.0f, 150.0f};
+		const int32 Step = FMath::Clamp(AirAttack->GetCurrentStep(), 0, 3);
+		FVector Outward = (Victim->GetActorLocation() - Player->GetActorLocation()).GetSafeNormal2D();
+		if (Outward.IsNearlyZero())
+		{
+			Outward = Player->GetActorForwardVector().GetSafeNormal2D();
+		}
+		FVector AirLaunch = Outward * HorizontalSpeeds[Step] + FVector::UpVector * UpwardSpeeds[Step];
+		AirLaunch.Y = FMath::Clamp(AirLaunch.Y, -YSpeedLimit, YSpeedLimit);
+		Victim->GetCharacterMovement()->StopMovementImmediately();
+		Victim->LaunchCharacter(AirLaunch, true, true);
+		return;
+	}
 	// 第三段攻击有两个命中窗口。首段保留受击与抽帧反馈，但不能提前把目标打出末段范围。
 	if (AttackIndex == 3)
 	{
@@ -509,13 +704,17 @@ void UCombatFeelLibrary::ApplyTunedKnockback(
 	{
 		HorizontalVelocity = HorizontalVelocity.GetClampedToMaxSize2D(MaxHorizontalSpeed);
 	}
-	const FVector LaunchVelocity(
+	FVector LaunchVelocity(
 		HorizontalVelocity.X,
 		HorizontalVelocity.Y,
 		bThirdFinisher || bFourthFinisher
 			? FMath::Clamp(RequestedVelocity.Z, bThirdFinisher ? 150.0 : 120.0, static_cast<double>(MaxUpwardSpeed))
 			: FMath::Clamp(RequestedVelocity.Z, -75.0, static_cast<double>(MaxUpwardSpeed))
 	);
+	if (Victim->GetCharacterMovement()->IsFalling())
+	{
+		LaunchVelocity.Y = FMath::Clamp(LaunchVelocity.Y, -YSpeedLimit, YSpeedLimit);
+	}
 	Victim->GetCharacterMovement()->StopMovementImmediately();
 	Victim->LaunchCharacter(LaunchVelocity, true, true);
 }

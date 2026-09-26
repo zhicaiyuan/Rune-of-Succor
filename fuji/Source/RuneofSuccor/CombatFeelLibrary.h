@@ -13,7 +13,41 @@ class RUNEOFSUCCOR_API UCombatFeelLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
-	/** Holds the previous lock-on view direction when target and player nearly coincide. */
+	UCombatFeelLibrary(const FObjectInitializer& ObjectInitializer);
+
+	/** 处理空中攻击点击；返回 false 时继续原有地面连击。 */
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", DisplayName = "Try Air Attack"), Category = "Combat|Air Attack")
+	static bool TryAirAttack(const UObject* WorldContextObject);
+
+	/** 供地面连击通知判断当前是否正在空中攻击。 */
+	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject", DisplayName = "Is Air Attack Active"), Category = "Combat|Air Attack")
+	static bool IsAirAttackActive(const UObject* WorldContextObject);
+
+	/** 普通左键按下时启动长按计时；短按仍按原逻辑立即出招。 */
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", DisplayName = "Begin Uppercut Hold"), Category = "Combat|Uppercut")
+	static void BeginUppercutHold(const UObject* WorldContextObject);
+
+	/** 左键松开时取消尚未触发的挑飞蓄按。 */
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", DisplayName = "End Uppercut Hold"), Category = "Combat|Uppercut")
+	static void EndUppercutHold(const UObject* WorldContextObject);
+
+	/** 复用翻滚的八方向索引，空中改用 Dodge_Air 蒙太奇。 */
+	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject", DisplayName = "Select Air Dodge Montage"), Category = "Combat|Air Dodge")
+	static UAnimMontage* SelectAirDodgeMontage(
+		const UObject* WorldContextObject,
+		UAnimMontage* GroundMontage,
+		int32 DirectionIndex
+	);
+
+	/** 空中闪避期间暂停下落，保留闪避蒙太奇的根运动。 */
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", DisplayName = "Begin Air Dodge Hover"), Category = "Combat|Air Dodge")
+	static UAnimMontage* BeginAirDodgeHover(const UObject* WorldContextObject, UAnimMontage* DodgeMontage);
+
+	/** 闪避结束或被打断后恢复下落。 */
+	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", DisplayName = "End Air Dodge Hover"), Category = "Combat|Air Dodge")
+	static void EndAirDodgeHover(const UObject* WorldContextObject);
+
+	/** 角色与目标几乎重合时保持原锁定视角，避免朝向突变。 */
 	UFUNCTION(BlueprintPure, meta = (DisplayName = "Find Stable Lock On Rotation", AdvancedDisplay = "MinHorizontalDistance"), Category = "Combat|Camera")
 	static FRotator FindStableLockOnRotation(
 		FVector Start,
@@ -93,14 +127,16 @@ public:
 		BlueprintCallable,
 		meta = (
 			WorldContext = "WorldContextObject",
-			DisplayName = "Apply Tuned Knockback"
+			DisplayName = "Apply Tuned Knockback",
+			AdvancedDisplay = "MaxAirborneYSpeed"
 		),
 		Category = "Combat|Hit Reaction"
 	)
 	static void ApplyTunedKnockback(
 		const UObject* WorldContextObject,
 		FVector RequestedVelocity,
-		int32 AttackIndex
+		int32 AttackIndex,
+		float MaxAirborneYSpeed = 70.0f
 	);
 
 	/** Keeps the attack lunge while reducing its translation so the blade remains in range. */
@@ -118,4 +154,9 @@ public:
 		Category = "Combat|Root Motion"
 	)
 	static void EndAttackRootMotion(const UObject* WorldContextObject);
+
+private:
+	/** 硬引用保证八方向空中闪避蒙太奇进入打包资源。 */
+	UPROPERTY(VisibleDefaultsOnly, Category = "Combat|Air Dodge")
+	TArray<TObjectPtr<UAnimMontage>> AirDodgeMontages;
 };
